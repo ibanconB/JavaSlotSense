@@ -1,5 +1,7 @@
 package com.slotsense.core;
 
+import com.slotsense.contract.v1.FeatureEvent;
+
 import java.util.*;
 
 public class SpinContext {
@@ -14,9 +16,10 @@ public class SpinContext {
     public List<Map<String,Object>> wins;
     public long totalWin;
     public List<String> events;
+    public List<FeatureEvent> bonusInfo = new ArrayList<>();
+    private int eventSeq = 0;
 
     //outcome
-    public long payout;
     public Map<String, Object> stateDelta;
 
     public RNG rng;
@@ -46,8 +49,9 @@ public class SpinContext {
         this.wins = new ArrayList<>();
         this.totalWin = 0;
         this.events = new ArrayList<>();
-        this.payout = 0;
         this.stateDelta = new HashMap<>();
+        bonusInfo.clear();
+        eventSeq = 0;
     }
 
     private static boolean getBoolean(Map<String, Object> map, String key, boolean def) {
@@ -56,6 +60,11 @@ public class SpinContext {
         if (v == null) return def;
         if (v instanceof Boolean) return (Boolean) v;
         return Boolean.parseBoolean(String.valueOf(v));
+    }
+
+    public void emitBonusInfo(String bonusName, Map<String, Object> payload, Long creditsWon) {
+        String id = "ev-" + (eventSeq++);
+        bonusInfo.add(new FeatureEvent(id, bonusName, creditsWon, payload));
     }
 
 }

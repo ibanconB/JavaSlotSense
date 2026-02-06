@@ -1,23 +1,26 @@
 package com.slotsense.core;
 
 import java.util.*;
+import com.slotsense.contract.v1.BoardState;
+import com.slotsense.contract.v1.Payout;
+import com.slotsense.contract.v1.SessionResult;
+import com.slotsense.contract.v1.SpinResult;
 
 public class BaseEngine {
-    protected final List<com.slotsense.core.Step> steps;
+    protected final List<Step> steps;
 
     public BaseEngine(List<Step> steps) {
         this.steps = steps;
     }
 
-    public Map<String, Object> spin(SpinContext ctx) {
+    public List<Object> spin(SpinContext ctx) {
         final long sessionSeed = ctx.seed;
         final RNG sessionRng = (ctx.rng != null) ? ctx.rng : new RNG(sessionSeed, false);
         ctx.rng = sessionRng;
 
         final long[] totalSessionWin = {0};
 
-        // función local (Java: método privado inline con lambda no tan cómodo -> lo hacemos como bloque)
-        java.util.function.BiFunction<String, Integer, Map<String, Object>> runOne =
+        java.util.function.BiFunction<String, Integer, SpinResult> runOne =
                 (spinType, spinIndex) -> {
 
                     ctx.resetTransient();
@@ -29,25 +32,42 @@ public class BaseEngine {
 
                     for (Step s : steps) s.run(ctx);
 
-                    ctx.payout = ctx.totalWin;
                     totalSessionWin[0] += ctx.totalWin;
 
-                    Map<String, Object> out = new HashMap<>();
-                    out.put("spinType", spinType);
-                    out.put("spinIndex", spinIndex);
-                    out.put("reelLayout", flattenBoard(ctx.board));
-                    out.put("creditsWon", ctx.totalWin);
-                    out.put("bet", ctx.bet);
-                    out.put("events", new ArrayList<>(ctx.events));
-                    out.put("generatedSequence", ctx.seed);
-                    out.put("stopPositions", ctx.state.get("stop_positions"));
+                    SpinResult out = new SpinResult();
+                    out.spinType = spinType;
+                    out.spinIndex = spinIndex;
+                    out.bet = ctx.bet;
+                    out.generatedSequence = ctx.seed;
+
+                    int rows = toIntOr(ctx.config.get("rows"), 3);
+                    int cols = toIntOr(ctx.config.get("cols"), 3);
+
+                    BoardState b = new BoardState();
+                    b.mode = "reels";
+                    b.rows = rows;
+                    b.cols = cols;
+                    b.symbols = flattenRowMajor(ctx.board);
+
+                    Object sp = ctx.state.get("stop_positions");
+                    if (sp instanceof List<?>) {
+                        @SuppressWarnings("unchecked")
+                        List<Integer> stopPos = (List<Integer>) sp;
+                        b.stopPositions = stopPos;
+                    }
+                    out.board = b;
+
+                    out.wins = new ArrayList<>(ctx.wins);
+                    out.payout = new Payout(ctx.totalWin, ctx.totalWin);
+                    out.bonusInfo = new ArrayList<>(ctx.bonusInfo);
+
 
                     return out;
                 };
 
-        Map<String, Object> baseResult = runOne.apply("base", 0);
+        SpinResult baseResult = runOne.apply("base", 0);
 
-        List<Map<String, Object>> freeSpins = new ArrayList<>();
+        List<SpinResult> freeSpins = new ArrayList<>();
         int guard = 0;
 
         while (Boolean.TRUE.equals(ctx.state.get("free_spins_active"))
@@ -62,7 +82,6 @@ public class BaseEngine {
                 break;
             }
 
-            // consumir 1 FS antes
             ctx.state.put("free_spins_left", toInt(ctx.state.get("free_spins_left")) - 1);
 
             freeSpins.add(runOne.apply("free", guard));
@@ -75,34 +94,16 @@ public class BaseEngine {
         ctx.state.remove("_spin_type");
         ctx.state.remove("is_free_spin");
 
-        if (freeSpins.isEmpty()) return baseResult;
+        if (freeSpins.isEmpty()) return List.of(baseResult);
 
-        Map<String, Object> sessionOut = new HashMap<>();
-        sessionOut.put("bet", ctx.bet);
-        sessionOut.put("generatedSequence", sessionSeed);
-        sessionOut.put("creditsWon", totalSessionWin[0]);
-        sessionOut.put("baseSpin", baseResult);
-        sessionOut.put("freeSpins", freeSpins);
+        SessionResult sessionOut = new SessionResult();
+        sessionOut.bet = ctx.bet;
+        sessionOut.generatedSequence = sessionSeed;
+        sessionOut.creditsWon = totalSessionWin[0];
+        sessionOut.baseSpin = baseResult;
+        sessionOut.freeSpins = freeSpins;
 
-        Map<String, Object> st = new HashMap<>();
-        st.put("free_spins_active", Boolean.TRUE.equals(ctx.state.get("free_spins_active")));
-        st.put("free_spins_left", toInt(ctx.state.get("free_spins_left")));
-        st.put("bonus_count", toInt(ctx.state.get("bonus_count")));
-        sessionOut.put("state", st);
-
-        if (sessionRng.debug) {
-            sessionOut.put("rngTrace", sessionRng.trace);
-            sessionOut.put("subSeeds", sessionRng.forks);
-        }
-
-        return sessionOut;
-    }
-
-    private static List<Object> flattenBoard(List<List<Object>> board) {
-        List<Object> flat = new ArrayList<>();
-        if (board == null) return flat;
-        for (List<Object> row : board) flat.addAll(row);
-        return flat;
+        return List.of(sessionOut);
     }
 
     private static int toInt(Object o) {
@@ -114,5 +115,12 @@ public class BaseEngine {
     private static int toIntOr(Object o, int def) {
         if (o == null) return def;
         return toInt(o);
+    }
+
+    private static List<Object> flattenRowMajor(List<List<Object>> board) {
+        List<Object> out = new ArrayList<>();
+        if (board == null) return out;
+        for (List<Object> row : board) out.addAll(row);
+        return out;
     }
 }

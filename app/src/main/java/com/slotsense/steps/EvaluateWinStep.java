@@ -13,7 +13,15 @@ public class EvaluateWinStep implements Step {
             evaluateWinningLines(ctx);
         }
 
+
+        ctx.emitBonusInfo("EvaluateWin", Map.of(
+                "evaluationMode", mode,
+                "totalWin", ctx.totalWin,
+                "wins", ctx.wins
+        ), ctx.totalWin);
+
         ctx.events.add("wins_evaluated");
+
     }
 
     @SuppressWarnings("unchecked")
@@ -30,6 +38,7 @@ public class EvaluateWinStep implements Step {
         if (np instanceof List) for (Object s : (List<?>) np) nonPaying.add(String.valueOf(s));
 
         int minMatch = toIntOr(ctx.config.get("min_match"), 3);
+        int cols = toIntOr(ctx.config.get("cols"), 3);
 
         long total = 0;
         List<Map<String, Object>> wins = new ArrayList<>();
@@ -73,6 +82,7 @@ public class EvaluateWinStep implements Step {
                 long winAmount = (long) (symbolPayout * streak * ctx.bet);
 
                 if (winAmount > 0) {
+
                     total += winAmount;
                     Map<String, Object> w = new HashMap<>();
                     w.put("line", lineIndex);
@@ -80,6 +90,15 @@ public class EvaluateWinStep implements Step {
                     w.put("count", streak);
                     w.put("win", winAmount);
                     wins.add(w);
+
+                    List<Integer> positions = new ArrayList<>();
+                    for (int i = 0; i < streak; i++) {
+
+                        int r = coords.get(i).get(0);
+                        int c = coords.get(i).get(1);
+                        positions.add(r * cols + c); // necesitas cols
+                    }
+                    w.put("positions", positions);
                 }
             }
         }

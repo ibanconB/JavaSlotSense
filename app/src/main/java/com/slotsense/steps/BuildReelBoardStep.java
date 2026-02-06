@@ -16,7 +16,7 @@ public class BuildReelBoardStep implements Step {
 
         Object active = ctx.config.get("active_reels");
         if(active == null) {
-            ctx.config.get("reels");
+            active =  ctx.config.get("reels");
         }
         if (!(active instanceof List<?>)){
             throw new IllegalArgumentException("Config must include reels");
@@ -70,6 +70,13 @@ public class BuildReelBoardStep implements Step {
         }
 
         ctx.board = board;
+        List<Object> symbols = flattenRowMajor(board);
+        ctx.emitBonusInfo("BuildReelBoard", Map.of(
+                "cols", cols,
+                "rows", rows,
+                "stopPositions", stopPositions,
+                "symbols", symbols
+        ), null);
         ctx.state.put("stop_positions", stopPositions);
         ctx.events.add("reel_board_built");
     }
@@ -80,5 +87,10 @@ public class BuildReelBoardStep implements Step {
         return Integer.parseInt(String.valueOf(o));
     }
 
+    private static List<Object> flattenRowMajor(List<List<Object>> board) {
+        List<Object> out = new ArrayList<>();
+        for (List<Object> row : board) out.addAll(row);
+        return out;
+    }
 }
 

@@ -54,8 +54,8 @@ public class Main {
         GenericEngine engine = new GenericEngine();
 
         ObjectMapper mapper = new ObjectMapper();
-        mapper.enable(SerializationFeature.INDENT_OUTPUT);
-        Map<String, Object> result = engine.spin(ctx);
+       // mapper.enable(SerializationFeature.INDENT_OUTPUT);
+        List<Object> result = engine.spin(ctx);
         System.out.println(mapper.writeValueAsString(result));
 
     }
